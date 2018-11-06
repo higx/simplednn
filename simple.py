@@ -29,7 +29,10 @@ def costFunc( a ):
     return np.sum(a,axis=1,keepdims=True)/a.size
 
     
-sstep = 0.03
+sstep = 0.02
+loop = True
+interaction = False
+
 
 class NeuralLayer:
     def __init__(self,layerindex,myNeuralCount,activeFunc):
@@ -118,7 +121,9 @@ def run_program():
     
     times = 0
     showindex = 0 
-    while True:
+    global loop
+    global interaction
+    while loop:
         Y_H  = n0.Forward(X)
         J = costFunc( LossFunc(Y_H ,Y ) )
         showindex+=1
@@ -126,6 +131,22 @@ def run_program():
             showindex = 0
             times+=1
             print("cost value=",J,"@[",times,"*10000]")
+            time.sleep(0.03)
+            if interaction:
+                control = input("input:")
+                if control=="exit":
+                    loop = False
+                elif control=="showorgpic":
+                    pylab.plot(x , y )
+                    pylab.show()
+                elif control=="showpic":
+                    show_y = Y_H * 100
+                    pylab.plot(x , show_y[0] )
+                    pylab.show()
+                elif control=="continue":
+                    interaction = False
+                else:
+                    interaction = False
 
         if J < 0.33:
             st = 0.02  
@@ -139,11 +160,12 @@ def exit_gracefully(signum, frame):
     # restore the original signal handler as otherwise evil things will happen
     # in raw_input when CTRL+C is pressed, and our signal handler is not re-entrant
     signal.signal(signal.SIGINT, original_sigint)
+    global interaction
     try:
-        print("====================")    
-        loop = False
+        print("=========Human interaction===========")    
+        interaction = True
     except RuntimeError:
-        loop = False
+        interaction = True
 
 
     # restore the exit gracefully handler here    
@@ -151,7 +173,7 @@ def exit_gracefully(signum, frame):
 
 if __name__ == '__main__':
     # store the original SIGINT handler
-    #loop = True
-    #original_sigint = signal.getsignal(signal.SIGINT)
-    #signal.signal(signal.SIGINT, exit_gracefully)
+
+    original_sigint = signal.getsignal(signal.SIGINT)
+    signal.signal(signal.SIGINT, exit_gracefully)
     run_program()
