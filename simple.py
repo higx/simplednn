@@ -3,8 +3,8 @@ import time
 import sys
 import numpy as np
 import pylab 
-
-
+import yaml
+import os
 
 def SigmoidFunc(arrary):
     return 1/(1 + np.power( np.e ,-arrary) ) 
@@ -29,7 +29,7 @@ def costFunc( a ):
     return np.sum(a,axis=1,keepdims=True)/a.size
 
     
-sstep = 0.02
+sstep = 0.008
 loop = True
 interaction = False
 
@@ -37,18 +37,27 @@ interaction = False
 class NeuralLayer:
     def __init__(self,layerindex,myNeuralCount,activeFunc):
         self.index = layerindex
-       # self.W=np.random.randn(myNeuralCount,lastNeuralCount)
         self.B=np.random.rand(myNeuralCount,1)
         self.neuralCount = myNeuralCount
         self.activeFunc = activeFunc
         self.lastNeural = None
         self.nextNeural = None
+        self.W = None
         
+    def SetWB(self,W,B):
+        self.W = W
+        self.B = B
+        
+    def ShowShape(self):
+        print("layer:",self.index)
+        print("W",self.W.shape)
+        print("B",self.B.shape)
         
     def SetLastNeural(self,neural):
         self.lastNeural = neural
         self.W = np.random.randn(self.neuralCount,self.lastNeural.neuralCount)
         neural.nextNeural = self
+        self.ShowShape()
         
     def Forward(self,x):
         if self.lastNeural==None:
@@ -79,50 +88,107 @@ class NeuralLayer:
             
         
     def ReviseWB(self ):
+        if self.lastNeural==None:
+            self.nextNeural.ReviseWB()
+            return
         self.W = self.W - sstep * self.dw
         self.B = self.B - sstep * self.db
         if self.nextNeural!=None:
             self.nextNeural.ReviseWB()
 
-
+    def OutputWB(self,config):
+        thislayer = {}
+        thislayer["index"] = self.index
+        thislayer["W"] = DumpNumpyData(str(self.index)+"_W",self.W)
+        thislayer["B"] = DumpNumpyData(str(self.index)+"_B",self.B)
+        thislayer["neuralCount"] = self.neuralCount
+        if self.activeFunc==PureOutFunc:
+            thislayer["activeFunc"] = "PureOutFunc"
+        elif self.activeFunc==ReLU:
+            thislayer["activeFunc"] = "ReLU"
+        elif self.activeFunc==SigmoidFunc:
+            thislayer["activeFunc"] = "SigmoidFunc"
+        else:
+            thislayer["activeFunc"] = "None"
+        config.append( thislayer )
+        if self.nextNeural!=None:
+            self.nextNeural.OutputWB(config)
+        
             
+def DumpNumpyData(filename,data):
+    np.save("./data/"+filename, data)
+    return filename
+    
+def LoadNumpyData(filename):
+    return np.load("./data/"+filename+".npy")
+    
             
 def run_program():
     #pylab.plot(x , y )
     #pylab.show()
+    Size = 100
+    times = 0
     
-    n0 =   NeuralLayer(0,1,PureOutFunc)     
+    if os.path.exists("./wb.yaml"):
     
-    n1 =   NeuralLayer(1,2,ReLU)
-    n1.SetLastNeural(n0)
-    
-    n2 =   NeuralLayer(2,20,ReLU)
-    n2.SetLastNeural(n1)
-    
-    n3 =   NeuralLayer(3,20,ReLU)
-    n3.SetLastNeural(n2)
-    
-    n4 =   NeuralLayer(3,10,ReLU)
-    n4.SetLastNeural(n3)
-    
-    n5 =   NeuralLayer(4,1,SigmoidFunc)
-    n5.SetLastNeural(n4)
-    
-    last_nu = n5  
+        with open('./wb.yaml', 'r') as yaml_file:
+            yaml_obj = yaml.load(yaml_file.read())
+            x = LoadNumpyData(yaml_obj["input"])
+            y = LoadNumpyData(yaml_obj["output"])
+            lastLayer = None
+            for layer in yaml_obj["layerconfig"]:
+                func = layer["activeFunc"]
+                if func=="PureOutFunc":
+                    print("create PureOutFunc")
+                    neuralLay = NeuralLayer(layer["index"],layer["neuralCount"],PureOutFunc) 
+                    n0 = neuralLay
+                elif func=="ReLU":
+                    print("create ReLU")
+                    neuralLay = NeuralLayer(layer["index"],layer["neuralCount"],ReLU) 
+                elif func=="SigmoidFunc":
+                    print("create SigmoidFunc")
+                    neuralLay = NeuralLayer(layer["index"],layer["neuralCount"],SigmoidFunc)  
+                if lastLayer!=None:
+                    neuralLay.SetLastNeural(lastLayer)
+                neuralLay.SetWB(LoadNumpyData(layer["W"]),LoadNumpyData(layer["B"]))
+                lastLayer = neuralLay
+                last_nu = neuralLay 
+    else:
+        n0 =   NeuralLayer(0,1,PureOutFunc)     
+        
+        n1 =   NeuralLayer(1,2,ReLU)
+        n1.SetLastNeural(n0)
+        
+        n2 =   NeuralLayer(2,20,ReLU)
+        n2.SetLastNeural(n1)
+        
+        n3 =   NeuralLayer(3,20,ReLU)
+        n3.SetLastNeural(n2)
+        
+        n4 =   NeuralLayer(4,10,ReLU)
+        n4.SetLastNeural(n3)
+        
+        n5 =   NeuralLayer(5,1,SigmoidFunc)
+        n5.SetLastNeural(n4)
+        
+        last_nu = n5  
+  
+        x=  np.linspace(0,10,Size)    
+        y = SampleFunc(x)
 
     
-    Size = 100
-    x=  np.linspace(0,10,Size)    
-    y = SampleFunc(x)
+
     Y_H = 0
 
     X = x.reshape(1,Size)/ 100
     Y = y.reshape(1,Size) /100
     
-    times = 0
+    
+  
     showindex = 0 
     global loop
     global interaction
+    global sstep
     while loop:
         Y_H  = n0.Forward(X)
         J = costFunc( LossFunc(Y_H ,Y ) )
@@ -131,7 +197,7 @@ def run_program():
             showindex = 0
             times+=1
             print("cost value=",J,"@[",times,"*10000]")
-            time.sleep(0.03)
+            #time.sleep(0.03)
             if interaction:
                 control = input("input:")
                 if control=="exit":
@@ -143,17 +209,30 @@ def run_program():
                     show_y = Y_H * 100
                     pylab.plot(x , show_y[0] )
                     pylab.show()
+                elif control=="dump":
+                    dumpinfo = {}
+                    dumpinfo["input"] = DumpNumpyData("X",x)
+                    dumpinfo["output"] = DumpNumpyData("Y",y)
+                    config=[]
+                    n0.OutputWB(config)
+                    dumpinfo["layerconfig"] = config
+                    with open("./wb.yaml", "w") as yaml_file:
+                       yaml.dump(dumpinfo, yaml_file,default_flow_style=False)
+                elif len(control)>2 and (control[0]=="+" or control[0]=="-"):
+                    f = float(control)  
+                    sstep += f
+                    print( sstep )
                 elif control=="continue":
                     interaction = False
                 else:
                     interaction = False
 
         if J < 0.33:
-            st = 0.02  
+            sstep = 0.02  
         if J < 0.32:
             break
         last_nu.Backward(Y)
-        n1.ReviseWB()  
+        n0.ReviseWB()  
     
 
 def exit_gracefully(signum, frame):
