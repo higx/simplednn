@@ -29,7 +29,7 @@ def costFunc( a ):
     return np.sum(a,axis=1,keepdims=True)/a.size
 
     
-sstep = 0.008
+sstep = 0.002
 loop = True
 interaction = False
 
@@ -59,6 +59,18 @@ class NeuralLayer:
         neural.nextNeural = self
         self.ShowShape()
         
+    def Output(self,x):
+        if self.lastNeural==None:
+            out = self.activeFunc(x)
+        else:
+            Z = np.dot(self.W,x) + self.B
+            A = self.activeFunc( Z )
+            out = A
+        if self.nextNeural!=None:
+            return self.nextNeural.Forward(out)
+        else:
+            return out
+            
     def Forward(self,x):
         if self.lastNeural==None:
             out = self.activeFunc(x)
@@ -156,22 +168,21 @@ def run_program():
     else:
         n0 =   NeuralLayer(0,1,PureOutFunc)     
         
-        n1 =   NeuralLayer(1,2,ReLU)
+        n1 =   NeuralLayer(1,5,ReLU)
         n1.SetLastNeural(n0)
         
-        n2 =   NeuralLayer(2,20,ReLU)
+        n2 =   NeuralLayer(2,10,ReLU)
         n2.SetLastNeural(n1)
         
-        n3 =   NeuralLayer(3,20,ReLU)
+        n3 =   NeuralLayer(3,10,ReLU)
         n3.SetLastNeural(n2)
         
-        n4 =   NeuralLayer(4,10,ReLU)
+        n4 =   NeuralLayer(4,1,SigmoidFunc)
         n4.SetLastNeural(n3)
         
-        n5 =   NeuralLayer(5,1,SigmoidFunc)
-        n5.SetLastNeural(n4)
+
         
-        last_nu = n5  
+        last_nu = n4  
   
         x=  np.linspace(0,10,Size)    
         y = SampleFunc(x)
@@ -180,8 +191,8 @@ def run_program():
 
     Y_H = 0
 
-    X = x.reshape(1,Size)/ 100
-    Y = y.reshape(1,Size) /100
+    X = x.reshape(1,Size)/ Size
+    Y = y.reshape(1,Size) /Size
     
     
   
@@ -202,12 +213,20 @@ def run_program():
                 control = input("input:")
                 if control=="exit":
                     loop = False
-                elif control=="showorgpic":
-                    pylab.plot(x , y )
-                    pylab.show()
                 elif control=="showpic":
                     show_y = Y_H * 100
                     pylab.plot(x , show_y[0] )
+                    pylab.plot(x , y )
+                    pylab.show()
+                elif control=="showtest":
+                    test_size = 100
+                    test_x=  np.linspace(0,20,test_size)  
+                    test_y = SampleFunc(test_x)
+                    test_X = test_x.reshape(1,test_size)/ test_size
+                    test_Y = n0.Output(test_X)
+                    show_test_y = test_Y * test_size
+                    pylab.plot(test_x , show_test_y[0] )
+                    pylab.plot(test_x , test_y )
                     pylab.show()
                 elif control=="dump":
                     dumpinfo = {}
