@@ -28,13 +28,11 @@ def LossFunc(a,y):
 def costFunc( a ):
     return np.sum(a,axis=1,keepdims=True)/a.size
 
-       
-Size = 100 
-sstep = 0.06
+    
+sstep = 0.04
 loop = True
 interaction = False
-sigma = 0.4
-mu = 0
+lambd = 0.02
 
 class NeuralLayer:
     def __init__(self,layerindex,myNeuralCount,activeFunc):
@@ -57,7 +55,7 @@ class NeuralLayer:
         
     def SetLastNeural(self,neural):
         self.lastNeural = neural
-        self.W = np.random.randn(self.neuralCount,self.lastNeural.neuralCount)* sigma + mu
+        self.W = np.random.randn(self.neuralCount,self.lastNeural.neuralCount)
         neural.nextNeural = self
         self.ShowShape()
         
@@ -91,16 +89,23 @@ class NeuralLayer:
     def Backward(self, Y_E ):
         if self.nextNeural==None:
             self.dz = self.A- Y_E
-            self.dw = np.dot(self.dz,self.lastNeural.A.T)/Y_E.size
+            self.dw = np.dot(self.dz,self.lastNeural.A.T)/Y_E.size + (lambd /Y_E.size) * self.W
             self.db = np.sum(self.dz,axis=1,keepdims=True)/Y_E.size 
             self.lastNeural.Backward(Y_E)
         elif self.lastNeural!=None:
             self.dz = np.dot( self.nextNeural.W.T ,self.nextNeural.dz ) * dReLU(self.Z)
-            self.dw = np.dot(self.dz,self.lastNeural.A.T)/Y_E.size
+            self.dw = np.dot(self.dz,self.lastNeural.A.T)/Y_E.size + (lambd /Y_E.size) * self.W
             self.db = np.sum(self.dz,axis=1,keepdims=True)/Y_E.size 
             self.lastNeural.Backward(Y_E)
             
-
+    def Calc_L2_Regularization(self):
+        if self.lastNeural==None:
+            return self.nextNeural.Calc_L2_Regularization()
+        
+        if self.nextNeural!=None:
+            return np.sum( np.square(self.W) ) + self.nextNeural.Calc_L2_Regularization()
+        else:
+            return np.sum( np.square(self.W) )
         
     def ReviseWB(self ):
         if self.lastNeural==None:
@@ -141,7 +146,7 @@ def LoadNumpyData(filename):
 def run_program():
     #pylab.plot(x , y )
     #pylab.show()
-
+    Size = 100
     times = 0
     
     if os.path.exists("./wb.yaml"):
@@ -186,6 +191,8 @@ def run_program():
         n5 =   NeuralLayer(5,1,SigmoidFunc)
         n5.SetLastNeural(n4)
         
+
+        
         last_nu = n5  
   
         x=  np.linspace(0,10,Size)    
@@ -206,15 +213,14 @@ def run_program():
     global sstep
     while loop:
         Y_H  = n0.Forward(X)
-        J = costFunc( LossFunc(Y_H ,Y ) )  
+        L2_regularization_cost  =  lambd * n0.Calc_L2_Regularization() / (2 * Size)
+        J = costFunc( LossFunc(Y_H ,Y ) ) + L2_regularization_cost 
         showindex+=1
         if showindex==10000:
             showindex = 0
             times+=1
             print("cost value=",J,"@[",times,"*10000]")
             #time.sleep(0.03)
-            if J < 0.3:
-                break
             if interaction:
                 control = input("input:")
                 if control=="exit":
@@ -252,6 +258,10 @@ def run_program():
                 else:
                     interaction = False
                 print( "sstep:", sstep)
+        if J < 0.33:
+            sstep = 0.02  
+        if J < 0.32:
+            break
         last_nu.Backward(Y)
         n0.ReviseWB()  
     

@@ -28,16 +28,16 @@ def LossFunc(a,y):
 def costFunc( a ):
     return np.sum(a,axis=1,keepdims=True)/a.size
 
-       
-Size = 100 
+    
 sstep = 0.06
 loop = True
 interaction = False
-sigma = 0.4
+sigma = 0.3
 mu = 0
 
+
 class NeuralLayer:
-    def __init__(self,layerindex,myNeuralCount,activeFunc):
+    def __init__(self,layerindex,myNeuralCount,keepprob,activeFunc):
         self.index = layerindex
         self.B=np.random.rand(myNeuralCount,1)
         self.neuralCount = myNeuralCount
@@ -45,6 +45,8 @@ class NeuralLayer:
         self.lastNeural = None
         self.nextNeural = None
         self.W = None
+        self.keepprob = keepprob
+        
         
     def SetWB(self,W,B):
         self.W = W
@@ -57,7 +59,7 @@ class NeuralLayer:
         
     def SetLastNeural(self,neural):
         self.lastNeural = neural
-        self.W = np.random.randn(self.neuralCount,self.lastNeural.neuralCount)* sigma + mu
+        self.W = np.random.randn(self.neuralCount,self.lastNeural.neuralCount) * sigma + mu
         neural.nextNeural = self
         self.ShowShape()
         
@@ -76,12 +78,14 @@ class NeuralLayer:
     def Forward(self,x):
         if self.lastNeural==None:
             out = self.activeFunc(x)
-            self.X = x
-            self.A = self.X
+            self.A = x
         else:
             self.Z = np.dot(self.W,x) + self.B
             self.A = self.activeFunc( self.Z )
+            self.randKeep = np.random.rand(self.A.shape[0],1 ) < self.keepprob
+            self.A = np.multiply(self.A , self.randKeep) / self.keepprob
             out = self.A
+
         
         if self.nextNeural!=None:
             return self.nextNeural.Forward(out)
@@ -92,11 +96,13 @@ class NeuralLayer:
         if self.nextNeural==None:
             self.dz = self.A- Y_E
             self.dw = np.dot(self.dz,self.lastNeural.A.T)/Y_E.size
+            self.dw = np.multiply(self.dw , self.randKeep)
             self.db = np.sum(self.dz,axis=1,keepdims=True)/Y_E.size 
             self.lastNeural.Backward(Y_E)
         elif self.lastNeural!=None:
             self.dz = np.dot( self.nextNeural.W.T ,self.nextNeural.dz ) * dReLU(self.Z)
             self.dw = np.dot(self.dz,self.lastNeural.A.T)/Y_E.size
+            self.dw = np.multiply(self.dw , self.randKeep)
             self.db = np.sum(self.dz,axis=1,keepdims=True)/Y_E.size 
             self.lastNeural.Backward(Y_E)
             
@@ -106,6 +112,7 @@ class NeuralLayer:
         if self.lastNeural==None:
             self.nextNeural.ReviseWB()
             return
+        
         self.W = self.W - sstep * self.dw
         self.B = self.B - sstep * self.db
         if self.nextNeural!=None:
@@ -114,6 +121,7 @@ class NeuralLayer:
     def OutputWB(self,config):
         thislayer = {}
         thislayer["index"] = self.index
+        thislayer["keepprob"] = self.keepprob
         thislayer["W"] = DumpNumpyData(str(self.index)+"_W",self.W)
         thislayer["B"] = DumpNumpyData(str(self.index)+"_B",self.B)
         thislayer["neuralCount"] = self.neuralCount
@@ -141,7 +149,7 @@ def LoadNumpyData(filename):
 def run_program():
     #pylab.plot(x , y )
     #pylab.show()
-
+    Size = 100
     times = 0
     
     if os.path.exists("./wb.yaml"):
@@ -155,38 +163,35 @@ def run_program():
                 func = layer["activeFunc"]
                 if func=="PureOutFunc":
                     print("create PureOutFunc")
-                    neuralLay = NeuralLayer(layer["index"],layer["neuralCount"],PureOutFunc) 
+                    neuralLay = NeuralLayer(layer["index"],layer["neuralCount"],layer["keepprob"],PureOutFunc) 
                     n0 = neuralLay
                 elif func=="ReLU":
                     print("create ReLU")
-                    neuralLay = NeuralLayer(layer["index"],layer["neuralCount"],ReLU) 
+                    neuralLay = NeuralLayer(layer["index"],layer["neuralCount"],layer["keepprob"],ReLU) 
                 elif func=="SigmoidFunc":
                     print("create SigmoidFunc")
-                    neuralLay = NeuralLayer(layer["index"],layer["neuralCount"],SigmoidFunc)  
+                    neuralLay = NeuralLayer(layer["index"],layer["neuralCount"],layer["keepprob"],SigmoidFunc)  
                 if lastLayer!=None:
                     neuralLay.SetLastNeural(lastLayer)
                 neuralLay.SetWB(LoadNumpyData(layer["W"]),LoadNumpyData(layer["B"]))
                 lastLayer = neuralLay
                 last_nu = neuralLay 
     else:
-        n0 =   NeuralLayer(0,1,PureOutFunc)     
+        n0 =   NeuralLayer(0,1,1.0,PureOutFunc)     
         
-        n1 =   NeuralLayer(1,10,ReLU)
+        n1 =   NeuralLayer(1,30,0.7,ReLU)
         n1.SetLastNeural(n0)
         
-        n2 =   NeuralLayer(2,20,ReLU)
+        n2 =   NeuralLayer(2,80,0.5,ReLU)
         n2.SetLastNeural(n1)
-        
-        n3 =   NeuralLayer(3,40,ReLU)
+         
+        n3 =   NeuralLayer(3,30,0.7,ReLU)
         n3.SetLastNeural(n2)
         
-        n4 =   NeuralLayer(4,10,ReLU)
+        n4 =   NeuralLayer(4,1,1.0,SigmoidFunc)
         n4.SetLastNeural(n3)
         
-        n5 =   NeuralLayer(5,1,SigmoidFunc)
-        n5.SetLastNeural(n4)
-        
-        last_nu = n5  
+        last_nu = n4  
   
         x=  np.linspace(0,10,Size)    
         y = SampleFunc(x)
@@ -213,8 +218,6 @@ def run_program():
             times+=1
             print("cost value=",J,"@[",times,"*10000]")
             #time.sleep(0.03)
-            if J < 0.3:
-                break
             if interaction:
                 control = input("input:")
                 if control=="exit":
@@ -252,6 +255,10 @@ def run_program():
                 else:
                     interaction = False
                 print( "sstep:", sstep)
+        if J < 0.33:
+            sstep = 0.02  
+        if J < 0.32:
+            break
         last_nu.Backward(Y)
         n0.ReviseWB()  
     
