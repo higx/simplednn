@@ -32,8 +32,8 @@ def costFunc( a ):
 sstep = 0.06
 loop = True
 interaction = False
-sigma = 0.3
-mu = 0
+#sigma = 0.3
+#mu = 0
 
 
 class NeuralLayer:
@@ -59,8 +59,8 @@ class NeuralLayer:
         
     def SetLastNeural(self,neural):
         self.lastNeural = neural
-        self.W = np.random.randn(self.neuralCount,self.lastNeural.neuralCount) * sigma + mu
         neural.nextNeural = self
+        self.W = np.random.randn(self.neuralCount,self.lastNeural.neuralCount) * np.sqrt(2/self.lastNeural.neuralCount)
         self.ShowShape()
         
     def Output(self,x):
@@ -71,7 +71,7 @@ class NeuralLayer:
             A = self.activeFunc( Z )
             out = A
         if self.nextNeural!=None:
-            return self.nextNeural.Forward(out)
+            return self.nextNeural.Output(out)
         else:
             return out
             

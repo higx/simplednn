@@ -28,11 +28,13 @@ def LossFunc(a,y):
 def costFunc( a ):
     return np.sum(a,axis=1,keepdims=True)/a.size
 
-    
-sstep = 0.002
+       
+Size = 100 
+sstep = 0.06
 loop = True
 interaction = False
-
+#sigma = 0.4
+#mu = 0
 
 class NeuralLayer:
     def __init__(self,layerindex,myNeuralCount,activeFunc):
@@ -55,7 +57,7 @@ class NeuralLayer:
         
     def SetLastNeural(self,neural):
         self.lastNeural = neural
-        self.W = np.random.randn(self.neuralCount,self.lastNeural.neuralCount)
+        self.W = np.random.randn(self.neuralCount,self.lastNeural.neuralCount)* np.sqrt(2/self.lastNeural.neuralCount)
         neural.nextNeural = self
         self.ShowShape()
         
@@ -67,7 +69,7 @@ class NeuralLayer:
             A = self.activeFunc( Z )
             out = A
         if self.nextNeural!=None:
-            return self.nextNeural.Forward(out)
+            return self.nextNeural.Output(out)
         else:
             return out
             
@@ -139,7 +141,7 @@ def LoadNumpyData(filename):
 def run_program():
     #pylab.plot(x , y )
     #pylab.show()
-    Size = 100
+
     times = 0
     
     if os.path.exists("./wb.yaml"):
@@ -211,6 +213,8 @@ def run_program():
             times+=1
             print("cost value=",J,"@[",times,"*10000]")
             #time.sleep(0.03)
+            if J < 0.3:
+                break
             if interaction:
                 control = input("input:")
                 if control=="exit":
@@ -248,10 +252,6 @@ def run_program():
                 else:
                     interaction = False
                 print( "sstep:", sstep)
-        if J < 0.33:
-            sstep = 0.02  
-        if J < 0.32:
-            break
         last_nu.Backward(Y)
         n0.ReviseWB()  
     

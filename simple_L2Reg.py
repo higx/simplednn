@@ -67,7 +67,7 @@ class NeuralLayer:
             A = self.activeFunc( Z )
             out = A
         if self.nextNeural!=None:
-            return self.nextNeural.Forward(out)
+            return self.nextNeural.Output(out)
         else:
             return out
             
