@@ -1,0 +1,49 @@
+input: X
+layerconfig:
+- B: 0_B
+  W: 0_W
+  activeFunc: PureOutFunc
+  index: 0
+  neuralCount: 1
+  sdb: 0_sdb
+  sdw: 0_sdw
+  vdb: 0_vdb
+  vdw: 0_vdw
+- B: 1_B
+  W: 1_W
+  activeFunc: ReLU
+  index: 1
+  neuralCount: 10
+  sdb: 1_sdb
+  sdw: 1_sdw
+  vdb: 1_vdb
+  vdw: 1_vdw
+- B: 2_B
+  W: 2_W
+  activeFunc: ReLU
+  index: 2
+  neuralCount: 20
+  sdb: 2_sdb
+  sdw: 2_sdw
+  vdb: 2_vdb
+  vdw: 2_vdw
+- B: 3_B
+  W: 3_W
+  activeFunc: ReLU
+  index: 3
+  neuralCount: 10
+  sdb: 3_sdb
+  sdw: 3_sdw
+  vdb: 3_vdb
+  vdw: 3_vdw
+- B: 4_B
+  W: 4_W
+  activeFunc: SigmoidFunc
+  index: 4
+  neuralCount: 1
+  sdb: 4_sdb
+  sdw: 4_sdw
+  vdb: 4_vdb
+  vdw: 4_vdw
+output: Y
+sstep: 0.01

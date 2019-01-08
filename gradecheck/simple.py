@@ -30,7 +30,7 @@ def costFunc( a ):
 
        
 Size = 100 
-sstep = 0.02
+sstep = 0.06
 loop = True
 interaction = False
 
@@ -314,7 +314,7 @@ def run_program():
     Y = y.reshape(1,Size) /Size
     
     
-    gradcheck = True
+    gradcheck = False
     showindex = 0 
     global loop
     global interaction
