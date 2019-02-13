@@ -9,8 +9,17 @@ import os
 def SigmoidFunc(arrary):
     return 1/(1 + np.power( np.e ,-arrary) ) 
 
+
+def Normalize(input, gamma, beta):
+    Epsilon = 10**-7
+    mu = np.sum(input) / input.size
+    sigma2 = np.sum(np.power((input-mu), 2)) / input.size
+    z_norm = (input - mu) / np.power(sigma2 + Epsilon, 0.5)
+    return z_norm * gamma + beta
+
+
 def PureOutFunc(x):
-    return x
+    return Normalize(x, 1, 0.5)
 
 
 def ReLU(x):
@@ -29,23 +38,31 @@ def costFunc( a ):
     return np.sum(a,axis=1,keepdims=True)/a.size
 
        
-Size = 100 
-sstep = 0.06
+Size = 1024 
+sstep = 0.01
 loop = True
 interaction = False
-
+beta1  = 0.9
+beta2  = 0.99
 #sigma = 0.4
 #mu = 0
 
 class NeuralLayer:
     def __init__(self,layerindex,myNeuralCount,activeFunc):
         self.index = layerindex
+        self.W = None
         self.B=np.random.rand(myNeuralCount,1)
         self.neuralCount = myNeuralCount
         self.activeFunc = activeFunc
         self.lastNeural = None
         self.nextNeural = None
-        self.W = None
+
+        self.dw =None
+        self.db = None
+        self.vdw = 0
+        self.vdb = 0
+        self.sdw = 0
+        self.sdb = 0
         self.SimulateW = None
         self.SimulateB = None
 
@@ -53,6 +70,15 @@ class NeuralLayer:
     def SetWB(self,W,B):
         self.W = W
         self.B = B
+
+    def SetVWB(self, W, B):
+        self.vdw = W
+        self.vdb = B
+
+    def SetSWB(self,W,B):
+        self.sdw = W
+        self.sdb = B
+
 
     def SetSimulateWB(self, start ,all_concatenate):
         self.SimulateW = all_concatenate[start:start+self.W.size].reshape(self.W.shape)
@@ -64,9 +90,7 @@ class NeuralLayer:
 
         
     def ShowShape(self):
-        print("layer:",self.index)
-        print("W",self.W.shape)
-        print("B",self.B.shape)
+        print("layer:",self.index," W:",self.W.shape," B:",self.B.shape)
         
     def SetLastNeural(self,neural):
         self.lastNeural = neural
@@ -183,12 +207,7 @@ class NeuralLayer:
             dtheta = (J_add - J_minus) / (2 * Epsilon)
             theta_approx.append(dtheta[0][0])
             w_b_array[i] = org_value
-            #output 
-            #calc J
-        #    self.MinusEpsilonWB(i,Epsilon)
-            #output
-            #calc J
-            #append to theta
+
         theta_approx = np.array(theta_approx)
         assert( theta_approx.size == theta.size )
         #print(theta_approx)
@@ -224,16 +243,31 @@ class NeuralLayer:
         if self.lastNeural==None:
             self.nextNeural.ReviseWB()
             return
-        self.W = self.W - sstep * self.dw
-        self.B = self.B - sstep * self.db
+
+        #self.W = self.W - sstep * self.dw
+        #self.B = self.B - sstep * self.db
+        self.vdw = beta1 * self.vdw + (1 - beta1) * self.dw 
+        self.vdb = beta1 * self.vdb + (1 - beta1) * self.db
+        self.sdw = beta2 * self.sdw + (1 - beta2) * self.dw * self.dw
+        self.sdb = beta2 * self.sdb + (1 - beta2) * self.db * self.db
+
+        self.W = self.W - sstep * ( self.vdw / np.sqrt(self.sdw + 10**-8))
+        self.B = self.B - sstep * (self.vdb / np.sqrt(self.sdb + 10**-8))
         if self.nextNeural!=None:
             self.nextNeural.ReviseWB()
 
     def OutputWB(self,config):
+        folder = os.path.exists("./data")
+        if not folder:
+            os.makedirs("./data")
         thislayer = {}
         thislayer["index"] = self.index
         thislayer["W"] = DumpNumpyData(str(self.index)+"_W",self.W)
         thislayer["B"] = DumpNumpyData(str(self.index)+"_B",self.B)
+        thislayer["vdw"] = DumpNumpyData(str(self.index)+"_vdw", self.vdw)
+        thislayer["vdb"] = DumpNumpyData(str(self.index)+"_vdb", self.vdb)
+        thislayer["sdw"] = DumpNumpyData(str(self.index)+"_sdw", self.sdw)
+        thislayer["sdb"] = DumpNumpyData(str(self.index)+"_sdb", self.sdb)
         thislayer["neuralCount"] = self.neuralCount
         if self.activeFunc==PureOutFunc:
             thislayer["activeFunc"] = "PureOutFunc"
@@ -259,6 +293,9 @@ def LoadNumpyData(filename):
 def run_program():
     #pylab.plot(x , y )
     #pylab.show()
+    loop = True
+    global interaction
+    global sstep
 
     times = 0
     
@@ -268,6 +305,7 @@ def run_program():
             yaml_obj = yaml.load(yaml_file.read())
             x = LoadNumpyData(yaml_obj["input"])
             y = LoadNumpyData(yaml_obj["output"])
+            sstep = yaml_obj["sstep"]
             lastLayer = None
             for layer in yaml_obj["layerconfig"]:
                 func = layer["activeFunc"]
@@ -284,6 +322,8 @@ def run_program():
                 if lastLayer!=None:
                     neuralLay.SetLastNeural(lastLayer)
                 neuralLay.SetWB(LoadNumpyData(layer["W"]),LoadNumpyData(layer["B"]))
+                neuralLay.SetVWB(LoadNumpyData(layer["vdw"]), LoadNumpyData(layer["vdb"]))
+                neuralLay.SetSWB(LoadNumpyData(layer["sdw"]), LoadNumpyData(layer["sdb"]))
                 lastLayer = neuralLay
                 last_nu = neuralLay 
     else:
@@ -294,31 +334,72 @@ def run_program():
         
         n2 =   NeuralLayer(2,20,ReLU)
         n2.SetLastNeural(n1)
-          
-        n3 =   NeuralLayer(3,10,ReLU)
+
+        n3 =   NeuralLayer(3,20,ReLU)
         n3.SetLastNeural(n2)
 
-        n4 =   NeuralLayer(4,1,SigmoidFunc)
+        n4 =   NeuralLayer(4,20,ReLU)
         n4.SetLastNeural(n3)
+
+        n5 =   NeuralLayer(5,20,ReLU)
+        n5.SetLastNeural(n4)
+
+        n6 =   NeuralLayer(6,20,ReLU)
+        n6.SetLastNeural(n5)
+
+        n7 =   NeuralLayer(7,1,SigmoidFunc)
+        n7.SetLastNeural(n6)
         
-        last_nu = n4 
+        last_nu = n7
   
-        x=  np.linspace(0,10,Size)    
+
+        x=  np.linspace(0,100,Size)    
         y = SampleFunc(x)
 
     
 
     Y_H = 0
 
-    X = x.reshape(1,Size)/ Size
-    Y = y.reshape(1,Size) /Size
+
     
-    
+
+  #  pylab.plot(x , y )
+  #  pylab.show()
+    #print(x[0:Batch_Size])
+    #X = batch_X[0, ].reshape(1, Batch_Size) / Batch_Size
+    #Y = batch_Y[0, ].reshape(1, Batch_Size) / Batch_Size
+    simple_X = x.reshape(1, Size)
+    simple_Y = y.reshape(1, Size)
+
+    Batch_Size = 128
+    row_size = int(Size / Batch_Size)
+
+    batch_X = simple_X.reshape(row_size, Batch_Size)
+    batch_Y = simple_Y.reshape(row_size, Batch_Size)
+
+    X = batch_X[0, ].reshape(1, Batch_Size)
+    Y = batch_Y[0, ].reshape(1, Batch_Size)
+
+
+    x_max = np.max(X.reshape(1, Batch_Size))
+    x_min = np.min(X.reshape(1, Batch_Size))
+
+
+    y_max = np.max(Y.reshape(1, Batch_Size))
+    y_min = np.min(Y.reshape(1, Batch_Size))
+
+    print("x max:", x_max, "y max:", y_max)
+
+    X = x_min + X / x_max
+    Y = y_min + Y / y_max
+
     gradcheck = False
     showindex = 0 
-    global loop
-    global interaction
-    global sstep
+
+
+    print("X shape:", X.shape, "Y shape:", Y.shape)
+  
+
     while loop:
         Y_H  = n0.Forward(X)
         J = costFunc( LossFunc(Y_H ,Y ) )  
@@ -332,18 +413,21 @@ def run_program():
             if gradcheck:
                 n0.GradCheck(X, Y)
             #time.sleep(0.03)
-            if J < 0.3:
+            if J < 0.1:
                 break
             if interaction:
                 control = input("input:")
                 if control=="exit":
                     loop = False
                 elif control=="showpic":
-                    show_y = Y_H * 100
-                    pylab.plot(x , show_y[0] )
-                    pylab.plot(x , y )
+                    x_simple = X[0]
+                    y_simple = Y[0]
+                    
+                    pylab.plot((x_simple * x_max), (Y_H * y_max)[0])
+                    pylab.plot((x_simple * x_max), (y_simple * y_max))
                     pylab.show()
                 elif control=="showtest":
+                    '''
                     test_size = 100
                     test_x=  np.linspace(0,20,test_size)  
                     test_y = SampleFunc(test_x)
@@ -353,8 +437,10 @@ def run_program():
                     pylab.plot(test_x , show_test_y[0] )
                     pylab.plot(test_x , test_y )
                     pylab.show()
+                    '''
                 elif control=="dump":
                     dumpinfo = {}
+                    dumpinfo["sstep"] = sstep
                     dumpinfo["input"] = DumpNumpyData("X",x)
                     dumpinfo["output"] = DumpNumpyData("Y",y)
                     config=[]
@@ -380,7 +466,7 @@ def exit_gracefully(signum, frame):
     signal.signal(signal.SIGINT, original_sigint)
     global interaction
     try:
-        print("=========Human interaction===========")    
+        print("=========Human interaction=========")    
         interaction = True
     except RuntimeError:
         interaction = True
@@ -389,11 +475,6 @@ def exit_gracefully(signum, frame):
     # restore the exit gracefully handler here    
     signal.signal(signal.SIGINT, exit_gracefully)
 
-
-def Normalize(input,miu,beta):
-    return np.sum(input)
-
-    
 if __name__ == '__main__':
     # store the original SIGINT handler
 
