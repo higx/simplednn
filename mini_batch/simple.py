@@ -6,290 +6,20 @@ import pylab
 import yaml
 import os
 
-def SigmoidFunc(arrary):
-    return 1/(1 + np.power( np.e ,-arrary) ) 
 
-
-def Normalize(input, gamma, beta):
-    Epsilon = 10**-7
-    mu = np.sum(input) / input.size
-    sigma2 = np.sum(np.power((input-mu), 2)) / input.size
-    z_norm = (input - mu) / np.power(sigma2 + Epsilon, 0.5)
-    return z_norm * gamma + beta
-
-
-def PureOutFunc(x):
-    return Normalize(x, 1, 0.5)
-
-
-def ReLU(x):
-    return x * (x > 0)
-
-def dReLU(x):
-    return 1. * (x > 0)
-
-def SampleFunc(x):
-    return  np.abs( np.sin( x ) )* np.power(x,2)
-    
-def LossFunc(a,y):
-    return  -(y * np.log(a)   + (1- y) * np.log( 1 - a) )
-
-def costFunc( a ):
-    return np.sum(a,axis=1,keepdims=True)/a.size
 
        
 Size = 1024 
 sstep = 0.01
 loop = True
 interaction = False
-beta1  = 0.9
-beta2  = 0.99
+
 #sigma = 0.4
 #mu = 0
 
-class NeuralLayer:
-    def __init__(self,layerindex,myNeuralCount,activeFunc):
-        self.index = layerindex
-        self.W = None
-        self.B=np.random.rand(myNeuralCount,1)
-        self.neuralCount = myNeuralCount
-        self.activeFunc = activeFunc
-        self.lastNeural = None
-        self.nextNeural = None
 
-        self.dw =None
-        self.db = None
-        self.vdw = 0
-        self.vdb = 0
-        self.sdw = 0
-        self.sdb = 0
-        self.SimulateW = None
-        self.SimulateB = None
-
-        
-    def SetWB(self,W,B):
-        self.W = W
-        self.B = B
-
-    def SetVWB(self, W, B):
-        self.vdw = W
-        self.vdb = B
-
-    def SetSWB(self,W,B):
-        self.sdw = W
-        self.sdb = B
-
-
-    def SetSimulateWB(self, start ,all_concatenate):
-        self.SimulateW = all_concatenate[start:start+self.W.size].reshape(self.W.shape)
-        self.SimulateB = all_concatenate[start + self.W.size:
-                                        start + self.W.size+self.B.size].reshape(self.B.shape)
-        assert((self.SimulateW==self.W).all())
-        assert((self.SimulateB == self.B).all())
-        return start+self.SimulateW.size + self.SimulateB.size
-
-        
-    def ShowShape(self):
-        print("layer:",self.index," W:",self.W.shape," B:",self.B.shape)
-        
-    def SetLastNeural(self,neural):
-        self.lastNeural = neural
-        self.W = np.random.randn(self.neuralCount,self.lastNeural.neuralCount)* np.sqrt(2/self.lastNeural.neuralCount)
-        neural.nextNeural = self
-        self.ShowShape()
-        
-    # output with SimulateWB
-    def SimulateOutput(self,x):
-        if self.lastNeural==None:
-            out = self.activeFunc(x)
-        else:
-            Z = np.dot(self.SimulateW, x) + self.SimulateB
-            A = self.activeFunc( Z )
-            out = A
-        if self.nextNeural!=None:
-            return self.nextNeural.SimulateOutput(out)
-        else:
-            return out
-        
-    #just output 
-    def Output(self,x):
-        if self.lastNeural==None:
-            out = self.activeFunc(x)
-        else:
-            Z = np.dot(self.W,x) + self.B
-            A = self.activeFunc( Z )
-            out = A
-        if self.nextNeural!=None:
-            return self.nextNeural.Output(out)
-        else:
-            return out
-
-    #save template A for backward
-    def Forward(self, x):
-        if self.lastNeural == None:
-            out = self.activeFunc(x)
-            self.X = x
-            self.A = self.X
-        else:
-            self.Z = np.dot(self.W, x) + self.B
-            self.A = self.activeFunc(self.Z)
-            out = self.A
-
-        if self.nextNeural != None:
-            return self.nextNeural.Forward(out)
-        else:
-            return out
-
-    def get_W_BConcatenate(self):
-        wrs = self.W.reshape(-1)
-        brs = self.B.reshape(-1)
-        return np.concatenate((wrs, brs), axis=0)
-
-    def get_dw_dbConcatenate(self):
-        dwrs = self.dw.reshape(-1)
-        dbrs = self.db.reshape(-1)  
-        return np.concatenate((dwrs,dbrs), axis=0) 
-
-    def get_WB_Info(self):
-        wshape = self.W.shape
-        wlength  = len( self.W.reshape(-1) )
-        bshape = self.B.shape
-        blength  = len( self.B.reshape(-1) )
-        
-        self.WRange = (self.lastNeural.BRange[1],self.lastNeural.BRange[1] +wlength)
-        
-        self.BRange = (self.WRange[1],self.WRange[1] +blength) 
-        
-        WBInfo = {"layer":self.index,"wlen":wlength,"blen":blength,"wrange":self.WRange,"brange":self.BRange}
-        return WBInfo
-        
-             
-        
-    def GradCheck(self,X,Y):
     
-        w_b_array = []
-        theta_approx = []
-        theta = []
-        Epsilon = 10**-7
-        nextNeural = self.nextNeural
-
-        while nextNeural !=None:
-            w_b_array = np.concatenate((w_b_array,nextNeural.get_W_BConcatenate()), axis=0)
-            theta = np.concatenate(
-                (theta, nextNeural.get_dw_dbConcatenate()), axis=0)
-            nextNeural = nextNeural.nextNeural
-
-        #set simmulate w_b to neural
-        nextNeural = self.nextNeural
-        setIndex = 0
-        while nextNeural != None:
-            #print("start:", setIndex, " set layer simulate", nextNeural.index)
-            setIndex = nextNeural.SetSimulateWB(setIndex, w_b_array)
-            nextNeural = nextNeural.nextNeural
-
-        assert(theta.size == w_b_array.size)
-
-
-        for i in range(len(w_b_array)):
-            org_value = w_b_array[i]
-
-            w_b_array[i] = org_value + Epsilon
-            y = self.SimulateOutput(X)
-            J_add = costFunc(LossFunc(y, Y))
-
-            #org_y = self.Output(X)
-            #assert( (Yorg_y==y).all() )
-        
-            w_b_array[i] = org_value - Epsilon
-            y = self.SimulateOutput(X)
-            J_minus = costFunc(LossFunc(y, Y))
-
-            dtheta = (J_add - J_minus) / (2 * Epsilon)
-            theta_approx.append(dtheta[0][0])
-            w_b_array[i] = org_value
-
-        theta_approx = np.array(theta_approx)
-        assert( theta_approx.size == theta.size )
-        #print(theta_approx)
-        #print(theta)
-
-        check = np.linalg.norm(theta_approx - theta) / \
-            (np.linalg.norm(theta_approx)+np.linalg.norm(theta))
-
-        print( check )
-        if check < 10**-7:
-            print("grade check: great" )
-        elif 10**-7 < check and check < 10**-5:
-            print("grade check: normal")
-        elif 10**-3 < check:
-            print("grade check: worse")
-
-        
-    def Backward(self, Y_E ):
-        if self.nextNeural==None:
-            self.dz = self.A- Y_E
-            self.dw = np.dot(self.dz,self.lastNeural.A.T)/Y_E.size
-            self.db = np.sum(self.dz,axis=1,keepdims=True)/Y_E.size 
-            self.lastNeural.Backward(Y_E)
-        elif self.lastNeural!=None:
-            self.dz = np.dot( self.nextNeural.W.T ,self.nextNeural.dz ) * dReLU(self.Z)
-            self.dw = np.dot(self.dz,self.lastNeural.A.T)/Y_E.size
-            self.db = np.sum(self.dz,axis=1,keepdims=True)/Y_E.size 
-            self.lastNeural.Backward(Y_E)
-            
-
-        
-    def ReviseWB(self ):
-        if self.lastNeural==None:
-            self.nextNeural.ReviseWB()
-            return
-
-        #self.W = self.W - sstep * self.dw
-        #self.B = self.B - sstep * self.db
-        self.vdw = beta1 * self.vdw + (1 - beta1) * self.dw 
-        self.vdb = beta1 * self.vdb + (1 - beta1) * self.db
-        self.sdw = beta2 * self.sdw + (1 - beta2) * self.dw * self.dw
-        self.sdb = beta2 * self.sdb + (1 - beta2) * self.db * self.db
-
-        self.W = self.W - sstep * ( self.vdw / np.sqrt(self.sdw + 10**-8))
-        self.B = self.B - sstep * (self.vdb / np.sqrt(self.sdb + 10**-8))
-        if self.nextNeural!=None:
-            self.nextNeural.ReviseWB()
-
-    def OutputWB(self,config):
-        folder = os.path.exists("./data")
-        if not folder:
-            os.makedirs("./data")
-        thislayer = {}
-        thislayer["index"] = self.index
-        thislayer["W"] = DumpNumpyData(str(self.index)+"_W",self.W)
-        thislayer["B"] = DumpNumpyData(str(self.index)+"_B",self.B)
-        thislayer["vdw"] = DumpNumpyData(str(self.index)+"_vdw", self.vdw)
-        thislayer["vdb"] = DumpNumpyData(str(self.index)+"_vdb", self.vdb)
-        thislayer["sdw"] = DumpNumpyData(str(self.index)+"_sdw", self.sdw)
-        thislayer["sdb"] = DumpNumpyData(str(self.index)+"_sdb", self.sdb)
-        thislayer["neuralCount"] = self.neuralCount
-        if self.activeFunc==PureOutFunc:
-            thislayer["activeFunc"] = "PureOutFunc"
-        elif self.activeFunc==ReLU:
-            thislayer["activeFunc"] = "ReLU"
-        elif self.activeFunc==SigmoidFunc:
-            thislayer["activeFunc"] = "SigmoidFunc"
-        else:
-            thislayer["activeFunc"] = "None"
-        config.append( thislayer )
-        if self.nextNeural!=None:
-            self.nextNeural.OutputWB(config)
-        
-            
-def DumpNumpyData(filename,data):
-    np.save("./data/"+filename, data)
-    return filename
-    
-def LoadNumpyData(filename):
-    return np.load("./data/"+filename+".npy")
-    
-            
+           
 def run_program():
     #pylab.plot(x , y )
     #pylab.show()
@@ -460,24 +190,10 @@ def run_program():
 
             n0.ReviseWB()
 
-def exit_gracefully(signum, frame):
-    # restore the original signal handler as otherwise evil things will happen
-    # in raw_input when CTRL+C is pressed, and our signal handler is not re-entrant
-    signal.signal(signal.SIGINT, original_sigint)
-    global interaction
-    try:
-        print("=========Human interaction=========")    
-        interaction = True
-    except RuntimeError:
-        interaction = True
 
-
-    # restore the exit gracefully handler here    
-    signal.signal(signal.SIGINT, exit_gracefully)
 
 if __name__ == '__main__':
     # store the original SIGINT handler
 
-    original_sigint = signal.getsignal(signal.SIGINT)
-    signal.signal(signal.SIGINT, exit_gracefully)
+
     run_program()
