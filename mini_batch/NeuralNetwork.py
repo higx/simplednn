@@ -40,17 +40,24 @@ def LoadNumpyData(filename):
 def SigmoidFunc(arrary):
     return 1/(1 + np.power(np.e, -arrary))
 
-
+'''
 def Normalize(input, gamma, beta):
     Epsilon = 10**-7
     mu = np.sum(input) / input.size
     sigma2 = np.sum(np.power((input-mu), 2)) / input.size
     z_norm = (input - mu) / np.power(sigma2 + Epsilon, 0.5)
     return z_norm * gamma + beta
+'''
 
+
+def Normalize(input, gamma, beta):
+    Epsilon = 10**-7
+    mu = np.mean(input, axis=0)
+    sigma2 = np.var(input, axis=0)
+    z_norm = (input - mu) / np.power(sigma2 + Epsilon, 0.5)
+    return z_norm * gamma + beta
 
 def PureOutFunc(x):
-#    return Normalize(x, 1, 0.5)
     return x
 
 def ReLU(x):
@@ -77,7 +84,9 @@ class NeuralLayer:
     def __init__(self, myNeuralCount, activeFunc):
         self.index = 0
         self.W = None
-        self.B = np.random.rand(myNeuralCount, 1)
+        self.Gamma = 1
+        self.Beta = 0.5
+        #self.B = np.random.rand(myNeuralCount, 1)
         self.neuralCount = myNeuralCount
         self.activeFunc = activeFunc
         self.lastNeural = None
@@ -91,6 +100,8 @@ class NeuralLayer:
         self.sdb = 0
         self.SimulateW = None
         self.SimulateB = None
+        self.Z = None
+        self.Z_cap = None
     
     def NextLayer(self,  myNeuralCount, activeFunc):
         nextlayer = NeuralLayer( myNeuralCount, activeFunc)
@@ -110,29 +121,29 @@ class NeuralLayer:
             nextNeural = nextNeural.nextNeural
         return nextNeural
 
-    def SetWB(self, W, B):
+    def SetWB(self, W):
         self.W = W
-        self.B = B
+        #self.B = B
 
-    def SetVWB(self, W, B):
+    def SetVWB(self, W):
         self.vdw = W
-        self.vdb = B
 
-    def SetSWB(self, W, B):
+
+    def SetSWB(self, W):
         self.sdw = W
-        self.sdb = B
+
 
     def SetSimulateWB(self, start, all_concatenate):
         self.SimulateW = all_concatenate[start:start +
                                          self.W.size].reshape(self.W.shape)
-        self.SimulateB = all_concatenate[start + self.W.size:
-                                         start + self.W.size+self.B.size].reshape(self.B.shape)
+        #self.SimulateB = all_concatenate[start + self.W.size:
+        #                                 start + self.W.size+self.B.size].reshape(self.B.shape)
         assert((self.SimulateW == self.W).all())
-        assert((self.SimulateB == self.B).all())
+        #assert((self.SimulateB == self.B).all())
         return start+self.SimulateW.size + self.SimulateB.size
 
     def ShowShape(self):
-        print("layer:", self.index, " W:", self.W.shape, " B:", self.B.shape)
+        print("layer:", self.index, " W:", self.W.shape)
 
     def SetLastNeural(self, neural):
         self.lastNeural = neural
@@ -159,7 +170,7 @@ class NeuralLayer:
         if self.lastNeural == None:
             out = self.activeFunc(x)
         else:
-            Z = np.dot(self.W, x) + self.B
+            Z = np.dot(self.W, x) 
             A = self.activeFunc(Z)
             out = A
         if self.nextNeural != None:
@@ -169,16 +180,14 @@ class NeuralLayer:
 
     #save template A for backward
     def Forward(self, x):
-
-        
         if self.lastNeural == None:
             out = self.activeFunc(x)
             self.X = x
             self.A = self.X
         else:
-
-            self.Z = np.dot(self.W, x) + self.B
-            self.A = self.activeFunc(self.Z)
+            self.Z = np.dot(self.W, x)
+            self.Z_cap = Normalize(self.Z,self.Gamma,self.Beta)
+            self.A = self.activeFunc(self.Z_cap)
             out = self.A
 
         if self.nextNeural != None:
@@ -273,6 +282,7 @@ class NeuralLayer:
             print("grade check: worst")
 
     def Backward(self, Y_E):
+        #https://zhuanlan.zhihu.com/p/36777565
         if self.nextNeural == None:
             self.dz = self.A - Y_E
             self.dw = np.dot(self.dz, self.lastNeural.A.T)/Y_E.size
@@ -294,12 +304,12 @@ class NeuralLayer:
         #self.W = self.W - sstep * self.dw
         #self.B = self.B - sstep * self.db
         self.vdw = beta1 * self.vdw + (1 - beta1) * self.dw
-        self.vdb = beta1 * self.vdb + (1 - beta1) * self.db
+        #self.vdb = beta1 * self.vdb + (1 - beta1) * self.db
         self.sdw = beta2 * self.sdw + (1 - beta2) * self.dw * self.dw
-        self.sdb = beta2 * self.sdb + (1 - beta2) * self.db * self.db
+        #self.sdb = beta2 * self.sdb + (1 - beta2) * self.db * self.db
 
         self.W = self.W - sstep * (self.vdw / np.sqrt(self.sdw + 10**-8))
-        self.B = self.B - sstep * (self.vdb / np.sqrt(self.sdb + 10**-8))
+        #self.B = self.B - sstep * (self.vdb / np.sqrt(self.sdb + 10**-8))
         if self.nextNeural != None:
             self.nextNeural.ReviseWB(sstep)
 
@@ -310,7 +320,7 @@ class NeuralLayer:
         thislayer = {}
         thislayer["index"] = self.index
         thislayer["W"] = DumpNumpyData(str(self.index)+"_W", self.W)
-        thislayer["B"] = DumpNumpyData(str(self.index)+"_B", self.B)
+        #thislayer["B"] = DumpNumpyData(str(self.index)+"_B", self.B)
         thislayer["vdw"] = DumpNumpyData(str(self.index)+"_vdw", self.vdw)
         thislayer["vdb"] = DumpNumpyData(str(self.index)+"_vdb", self.vdb)
         thislayer["sdw"] = DumpNumpyData(str(self.index)+"_sdw", self.sdw)
@@ -332,18 +342,8 @@ class NeuralLayer:
 class NeuralNetwork:
     def __init__(self):
         self.head = NeuralLayer(1, PureOutFunc). \
-            NextLayer(16, ReLU). \
-            NextLayer(16, ReLU). \
-            NextLayer(16, ReLU). \
-            NextLayer(16, ReLU). \
-            NextLayer(16, ReLU). \
-            NextLayer(16, ReLU). \
-            NextLayer(16, ReLU). \
-            NextLayer(16, ReLU). \
-            NextLayer(16, ReLU). \
-            NextLayer(16, ReLU). \
-            NextLayer(16, ReLU). \
-            NextLayer(16, ReLU). \
+            NextLayer(4, ReLU). \
+            NextLayer(4, ReLU). \
             NextLayer(1, SigmoidFunc).Head()
 
         self.sstep = 0.03
@@ -381,8 +381,8 @@ class NeuralNetwork:
     def Learn(self,_X,_Y):
 
         Size = _X.size
-        Batch_Size = 512
-        _X = Normalize(_X, 1, 0.5)
+        Batch_Size = 128
+        #_X = Normalize(_X, 1, 0.5)
 
 
         simple_X = _X.reshape(1, Size)
@@ -460,7 +460,7 @@ if __name__ == '__main__':
     original_sigint = signal.getsignal(signal.SIGINT)
     signal.signal(signal.SIGINT, exit_gracefully)
     nnw = NeuralNetwork()
-    x = np.linspace(-10, 10, 2048) 
+    x = np.linspace(-10, 10, 128) 
     y = SampleFunc(x) 
    
     nnw.Learn(x,y)
